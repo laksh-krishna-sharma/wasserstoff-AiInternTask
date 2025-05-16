@@ -173,3 +173,14 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+# data folders
+data/db/*
+!data/db/.gitkeep
+
+data/processed/*
+!data/processed/.gitkeep
+
+data/upload/*
+!data/upload/.gitkeep
