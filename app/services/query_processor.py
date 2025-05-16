@@ -1,10 +1,10 @@
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
-from langchain.output_parsers import PydanticOutputParser
+from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 import json
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List
 
 from app.config import LLM_MODEL, LLM_TEMPERATURE, GROQ_API_KEY
 from app.services.vector_store import VectorStore
@@ -38,20 +38,19 @@ class QueryProcessor:
     """Service for processing queries against documents and identifying themes."""
 
     def __init__(self):
-        """Initialize the query processor."""
         self.vector_store = VectorStore()
         self.llm = ChatGroq(
             model=LLM_MODEL,
             temperature=LLM_TEMPERATURE,
             groq_api_key=GROQ_API_KEY
         )
+        self.document_parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=DocumentResponse), llm=self.llm)
+        self.theme_parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=ThemeResponse), llm=self.llm)
 
     def process_query(self, query, top_k=10):
         """Process a query against documents and return individual responses."""
-        # Get relevant document chunks
         document_chunks = self.vector_store.similarity_search(query, k=top_k)
-        
-        # Group chunks by document
+
         doc_chunks = {}
         for doc, score in document_chunks:
             doc_id = doc.metadata.get("id")
@@ -62,29 +61,23 @@ class QueryProcessor:
                     "score": score
                 }
             doc_chunks[doc_id]["chunks"].append(doc.page_content)
-        
-        # Extract answers from each document
+
         document_responses = []
         for doc_id, doc_data in doc_chunks.items():
             answer = self._extract_answer_from_document(
-                query, 
-                doc_data["chunks"], 
-                doc_id, 
+                query,
+                doc_data["chunks"],
+                doc_id,
                 doc_data["filename"]
             )
             document_responses.append(answer)
-        
-        # Sort by relevance
+
         document_responses.sort(key=lambda x: x.relevance, reverse=True)
-        
         return document_responses
 
     def _extract_answer_from_document(self, query, chunks, doc_id, filename):
-        """Extract an answer from document chunks."""
-        # Combine chunks into context
         context = "\n\n".join(chunks)
-        
-        # Create prompt
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert document analyzer. 
             Extract the most relevant information from the document context that answers the query.
@@ -108,18 +101,14 @@ class QueryProcessor:
             }}
             """)
         ])
-        
-        # Run chain
+
         chain = LLMChain(llm=self.llm, prompt=prompt)
         result = chain.run(query=query, context=context, doc_id=doc_id, filename=filename)
-        
+
         try:
-            # Parse result to DocumentResponse
-            parsed_result = json.loads(result)
-            return DocumentResponse(**parsed_result)
+            return self.document_parser.parse(result)
         except Exception as e:
             print(f"Error parsing document response: {e}")
-            # Return a fallback response
             return DocumentResponse(
                 doc_id=doc_id,
                 filename=filename,
@@ -129,19 +118,16 @@ class QueryProcessor:
             )
 
     def identify_themes(self, document_responses, query):
-        """Identify themes across document responses."""
         if not document_responses:
             return []
-        
-        # Create context for theme identification
+
         context = []
         for resp in document_responses:
-            if resp.relevance >= 3:  # Only include somewhat relevant docs
+            if resp.relevance >= 3:
                 context.append(f"Document {resp.doc_id} ({resp.filename}): {resp.extracted_answer}")
-        
+
         context_text = "\n\n".join(context)
-        
-        # Create prompt
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert at identifying themes across documents.
             Analyze the information from multiple documents and identify common themes that emerge.
@@ -165,41 +151,31 @@ class QueryProcessor:
             ]
             """)
         ])
-        
-        # Run chain
+
         chain = LLMChain(llm=self.llm, prompt=prompt)
         result = chain.run(query=query, context=context_text)
-        
+
         try:
-            # Parse result to list of ThemeResponse
-            parsed_result = json.loads(result)
-            themes = [ThemeResponse(**theme) for theme in parsed_result]
-            return themes
+            themes_json = json.loads(result)
+            return [ThemeResponse(**theme) for theme in themes_json]
         except Exception as e:
             print(f"Error parsing theme response: {e}")
             return []
 
     def synthesize_answer(self, document_responses, themes, query):
-        """Synthesize a final answer based on document responses and themes."""
-        # Create context
-        doc_context = []
-        for resp in document_responses:
-            if resp.relevance >= 3:  # Only include somewhat relevant docs
-                doc_context.append(f"Document {resp.doc_id} ({resp.filename}): {resp.extracted_answer}")
-        
-        doc_context_text = "\n\n".join(doc_context)
-        
-        theme_context = []
-        for theme in themes:
-            theme_context.append(f"Theme: {theme.theme_name}\nDescription: {theme.theme_description}\nSupporting Documents: {', '.join(theme.supporting_documents)}")
-        
-        theme_context_text = "\n\n".join(theme_context)
-        
-        # Create prompt
+        doc_context = [
+            f"Document {resp.doc_id} ({resp.filename}): {resp.extracted_answer}"
+            for resp in document_responses if resp.relevance >= 3
+        ]
+        theme_context = [
+            f"Theme: {theme.theme_name}\nDescription: {theme.theme_description}\nSupporting Documents: {', '.join(theme.supporting_documents)}"
+            for theme in themes
+        ]
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert at synthesizing information from multiple documents.
             Create a comprehensive, well-structured answer to the query based on the information from documents and identified themes.
-            Include specific citations to documents (DOC001, DOC002, etc.) to support your points.
+            Include specific citations to documents to support your points.
             Organize your answer by themes when possible."""),
             ("user", """
             Query: {query}
@@ -213,29 +189,17 @@ class QueryProcessor:
             Provide a comprehensive answer to the query, organizing information by themes and citing specific documents.
             """)
         ])
-        
-        # Run chain
+
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        result = chain.run(query=query, doc_context=doc_context_text, theme_context=theme_context_text)
-        
+        result = chain.run(query=query, doc_context="\n\n".join(doc_context), theme_context="\n\n".join(theme_context))
         return result
 
     def process_query_with_themes(self, query):
-        """Process a query with theme identification and synthesis."""
-        # Get individual document responses
         document_responses = self.process_query(query)
-        
-        # Identify themes
         themes = self.identify_themes(document_responses, query)
-        
-        # Synthesize answer
         synthesized_answer = self.synthesize_answer(document_responses, themes, query)
-        
-        # Create final response
-        response = SynthesizedResponse(
+        return SynthesizedResponse(
             document_responses=document_responses,
             identified_themes=themes,
             synthesized_answer=synthesized_answer
         )
-        
-        return response

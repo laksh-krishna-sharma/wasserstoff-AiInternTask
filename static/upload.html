@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload & Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen px-4 py-6">
+  <div class="max-w-3xl mx-auto bg-white shadow-lg rounded-xl p-6">
+    <h1 class="text-3xl font-bold text-center mb-6 text-blue-700">Upload PDF and Ask Questions</h1>
+
+    <form id="upload-form" class="space-y-4">
+      <input type="file" id="files" name="files" multiple accept="application/pdf"
+             class="block w-full border border-gray-300 p-2 rounded-lg" />
+      <button type="submit"
+              class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+        Upload PDFs
+      </button>
+    </form>
+
+    <div id="upload-status" class="mt-4 text-green-600 font-medium"></div>
+
+    <hr class="my-8">
+
+    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Chatbot</h2>
+    <div id="chat-box" class="h-96 overflow-y-auto border border-gray-300 p-4 rounded bg-gray-100 mb-4 text-sm space-y-2"></div>
+
+    <form id="chat-form" class="space-y-2">
+      <textarea id="query" placeholder="Ask a question..." rows="3"
+                class="w-full border border-gray-300 p-2 rounded-lg"></textarea>
+      <button type="submit"
+              class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition">
+        Send
+      </button>
+    </form>
+  </div>
+
+  <script>
+    const uploadForm = document.getElementById('upload-form');
+    const chatForm = document.getElementById('chat-form');
+    const chatBox = document.getElementById('chat-box');
+    const uploadStatus = document.getElementById('upload-status');
+    let uploadedDocIds = [];
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      const files = document.getElementById('files').files;
+      if (!files.length) return alert('Please select at least one file.');
+
+      for (let file of files) formData.append('files', file);
+
+      const res = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        uploadStatus.textContent = 'Uploaded successfully!';
+        uploadedDocIds = data.documents.map(doc => doc.id);
+      } else {
+        uploadStatus.textContent = `Upload failed: ${data.detail}`;
+      }
+    });
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const queryInput = document.getElementById('query');
+      const query = queryInput.value.trim();
+      if (!query) return;
+
+      chatBox.innerHTML += `<div><b>You:</b> ${query}</div>`;
+      queryInput.value = '';
+
+      const res = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: query,
+          document_ids: uploadedDocIds
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const themes = data.identified_themes.map(t => `• ${t}`).join('<br>');
+        const docResponses = data.document_responses.map((r, i) => `<b>Doc ${i + 1}:</b> ${r}`).join('<br><br>');
+
+        chatBox.innerHTML += `
+          <div><b>Bot:</b><br>
+            <div class="pl-2 py-1"><b>Summary:</b> ${data.synthesized_answer}</div>
+            ${themes ? `<div class="pl-2 pt-2"><b>Themes:</b><br>${themes}</div>` : ''}
+            ${docResponses ? `<div class="pl-2 pt-2"><b>Sources:</b><br>${docResponses}</div>` : ''}
+          </div>
+        `;
+        chatBox.scrollTop = chatBox.scrollHeight;
+      } else {
+        chatBox.innerHTML += `<div class="text-red-600"><b>Error:</b> ${data.detail}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>
