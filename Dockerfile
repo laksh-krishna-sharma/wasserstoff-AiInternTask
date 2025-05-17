@@ -9,3 +9,7 @@ COPY app ./app
 COPY static ./static
 
 RUN mkdir -p /app/data/db /app/data/processed /app/data/uploads
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
