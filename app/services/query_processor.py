@@ -1,13 +1,26 @@
+import re
+import json
+from pydantic import BaseModel, Field
+from typing import List
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
-import json
-from pydantic import BaseModel, Field
-from typing import List
 
 from app.config import LLM_MODEL, LLM_TEMPERATURE, GROQ_API_KEY
 from app.services.vector_store import VectorStore
+
+
+def clean_text(text: str) -> str:
+    # Remove unwanted symbols like non-printable chars, excessive punctuation, etc.
+    # Replace multiple spaces/newlines/tabs with a single space
+    text = re.sub(r'\s+', ' ', text)
+    # Remove unusual/unicode control characters (keep basic printable ASCII)
+    text = re.sub(r'[^\x20-\x7E]+', ' ', text)
+    # Remove repeated punctuation (e.g. "!!!" to "!")
+    text = re.sub(r'([!?.]){2,}', r'\1', text)
+    # Trim leading/trailing spaces
+    return text.strip()
 
 
 class DocumentResponse(BaseModel):
@@ -44,8 +57,14 @@ class QueryProcessor:
             temperature=LLM_TEMPERATURE,
             groq_api_key=GROQ_API_KEY
         )
-        self.document_parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=DocumentResponse), llm=self.llm)
-        self.theme_parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=ThemeResponse), llm=self.llm)
+        self.document_parser = OutputFixingParser.from_llm(
+            parser=PydanticOutputParser(pydantic_object=DocumentResponse),
+            llm=self.llm
+        )
+        self.theme_parser = OutputFixingParser.from_llm(
+            parser=PydanticOutputParser(pydantic_object=ThemeResponse),
+            llm=self.llm
+        )
 
     def process_query(self, query, top_k=10):
         """Process a query against documents and return individual responses."""
@@ -103,10 +122,12 @@ class QueryProcessor:
         ])
 
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        result = chain.run(query=query, context=context, doc_id=doc_id, filename=filename)
+        raw_result = chain.run(query=query, context=context, doc_id=doc_id, filename=filename)
+
+        cleaned_result = clean_text(raw_result)
 
         try:
-            return self.document_parser.parse(result)
+            return self.document_parser.parse(cleaned_result)
         except Exception as e:
             print(f"Error parsing document response: {e}")
             return DocumentResponse(

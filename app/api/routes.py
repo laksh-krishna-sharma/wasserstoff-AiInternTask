@@ -1,7 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query
-from typing import List, Optional
-import json
-import os
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import List
 
 from app.services.document_processor import DocumentProcessor
 from app.services.vector_store import VectorStore
@@ -13,26 +11,18 @@ document_processor = DocumentProcessor()
 vector_store = VectorStore()
 query_processor = QueryProcessor()
 
-
 @router.post("/documents/upload", response_model=DocumentList)
 async def upload_documents(files: List[UploadFile] = File(...)):
-    """
-    Upload multiple documents and process them.
-    """
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
-    
+
     processed_docs = []
-    
+
     for file in files:
         try:
-            # Process document and extract text
             doc, chunks = document_processor.process_document(file)
-            
-            # Add document chunks to vector store
             vector_store.add_documents(chunks)
-            
-            # Add processed document to response
+
             processed_docs.append({
                 "id": doc["id"],
                 "filename": doc["filename"],
@@ -41,8 +31,12 @@ async def upload_documents(files: List[UploadFile] = File(...)):
             })
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error processing {file.filename}: {str(e)}")
-    
+
     return {"documents": processed_docs}
+
+
+# Other routes (get_documents, process_query) remain unchanged
+
 
 
 @router.get("/documents", response_model=DocumentList)
