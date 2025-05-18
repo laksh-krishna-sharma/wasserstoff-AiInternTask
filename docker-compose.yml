@@ -2,17 +2,14 @@ version: "3.9"
 
 services:
   rag_chatbot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: rag_chatbot:v1.0
+    image: lakshkrishnasharma/rag-chatbot:v1.1
     ports:
-      - "8000:8000"
+      - "8090:8090"
     env_file:
       - .env
     volumes:
       - ./data/db:/app/data/db
       - ./data/processed:/app/data/processed
       - ./data/uploads:/app/data/uploads
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8090
     restart: unless-stopped
