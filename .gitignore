@@ -184,3 +184,6 @@ data/processed/*
 
 data/uploads/*
 !data/uploads/.gitkeep
+
+
+wasserstoff-aiInterntask.pem
