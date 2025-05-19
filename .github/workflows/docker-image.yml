@@ -1,0 +1,43 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get latest version tag
+      id: get_tag
+      run: |
+        git fetch --tags
+        latest=$(git tag --sort=-v:refname | head -n 1)
+        if [[ "$latest" =~ ^v[0-9]+$ ]]; then
+          version_number=${latest#v}
+          new_version="v$((version_number + 1))"
+        else
+          new_version="v1"
+        fi
+        echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: Build Docker image
+      run: |
+        docker build . --file Dockerfile \
+          --tag lakshkrishnasharma/rag-chatbot:${{ steps.get_tag.outputs.new_version }} \
+          --tag lakshkrishnasharma/rag-chatbot:latest
+
+    - name: Push Docker images
+      run: |
+        docker push lakshkrishnasharma/rag-chatbot:${{ steps.get_tag.outputs.new_version }}
+        docker push lakshkrishnasharma/rag-chatbot:latest
+
