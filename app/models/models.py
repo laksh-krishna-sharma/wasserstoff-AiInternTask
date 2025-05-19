@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from pydantic import BaseModel
+from typing import List, Optional
 
 
 class DocumentMetadata(BaseModel):
@@ -42,4 +42,4 @@ class DocumentList(BaseModel):
 class QueryRequest(BaseModel):
     """Request model for a query."""
     query: str
-    document_ids: Optional[List[str]] = None  # Optional list of document IDs to filter by
+    document_ids: Optional[List[str]] = None

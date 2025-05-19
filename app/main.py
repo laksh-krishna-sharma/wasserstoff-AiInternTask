@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 import os
 
 from app.api.routes import router
-from app.config import UPLOAD_DIR, PROCESSED_DIR
+from app.config import UPLOAD_DIR
 
 # Create FastAPI app
 app = FastAPI(
@@ -17,7 +17,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to your frontend domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,7 +41,6 @@ async def read_root():
 
 if __name__ == "__main__":
     import uvicorn
-    import os
 
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8090))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port)

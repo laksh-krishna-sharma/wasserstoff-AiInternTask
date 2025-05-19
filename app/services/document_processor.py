@@ -1,15 +1,12 @@
 import os
-import io
 import uuid
-from pathlib import Path
 
 import pytesseract
 from PIL import Image
 from pypdf import PdfReader
-import docx  # python-docx
+import docx
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 
 from app.config import UPLOAD_DIR, PROCESSED_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
