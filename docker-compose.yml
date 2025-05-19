@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   rag_chatbot:
-    image: lakshkrishnasharma/rag-chatbot:v1.1
+    image: lakshkrishnasharma/rag-chatbot:latest
     ports:
       - "8090:8090"
     env_file:
