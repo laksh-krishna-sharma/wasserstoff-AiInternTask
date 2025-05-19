@@ -11,6 +11,6 @@ COPY main.py .
 
 RUN mkdir -p /app/data/db /app/data/processed /app/data/uploads
 
-EXPOSE 8000
+EXPOSE 8090
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
